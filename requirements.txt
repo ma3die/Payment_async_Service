@@ -1,0 +1,12 @@
+alembic==1.18.5
+asyncpg==0.31.0
+click==8.4.2
+gunicorn==26.0.0
+fastapi==0.141.1
+faststream[rabbit]==0.7.7
+httpx==0.28.1
+pydantic==2.13.4
+pydantic_settings==2.14.2
+python_dotenv==1.2.2
+sqlalchemy==2.0.51
+uvicorn==0.52.1

@@ -1,0 +1,90 @@
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: payment_async_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres-base:/var/lib/postgresql/data/
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: always
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: payment_async_rabbit
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-payment}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-payment}
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: always
+
+  api:
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+    container_name: payment_async_api
+    env_file:
+      - .env
+    ports:
+      - "8001:8001"
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      RABBITMQ_HOST: rabbitmq
+    volumes:
+      - ./logs:/app/logs
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/')"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    restart: always
+
+  consumer:
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+    container_name: payment_async_consumer
+    command: python -m consumers.worker
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      RABBITMQ_HOST: rabbitmq
+    volumes:
+      - ./logs:/app/logs
+    depends_on:
+      db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    restart: always
+
+volumes:
+  postgres-base:
+  rabbitmq-data:
